@@ -1,0 +1,42 @@
+from cozmo_fsm import *
+import requests
+import time
+import math
+
+last = 0
+
+class PublisherNode(StateNode):
+    def start(self, event=None):
+        super().start(event)
+
+        requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])}")
+        global last
+        print(robot.pose.position.x, robot.pose.position.y, last-time.time())
+        print(pf.pose)
+        last=time.time()
+
+class cozmo_ar(StateMachineProgram):
+    $setup {
+        launcher: StateNode() =N=> {publisher, spinner}
+
+        publisher: PublisherNode() =T(0.1)=> publisher
+
+        spinner: StateNode() =N=> spinner
+    }
+
+    def __init__(self):
+        global pf
+        landmarks = {
+            'Aruco-1': Pose(0, 0, 0, angle_z=degrees(180)),
+            'Aruco-2': Pose(0, 100, 0, angle_z=degrees(180)),
+        }
+
+        pf = ParticleFilter(robot,
+                            landmarks = landmarks,
+                            num_particles = 1000,
+                            motion_model = DefaultMotionModel(robot, sigma_trans=0.4, sigma_rot=0.05),
+                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=50)
+        )
+
+        super().__init__(aruco_marker_size=50,
+                         particle_filter=pf)
