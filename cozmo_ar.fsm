@@ -9,10 +9,19 @@ class PublisherNode(StateNode):
     def start(self, event=None):
         super().start(event)
 
-        requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])}")
+        cube_rel_x = -cube1.pose.position.x + robot.pose.position.x + pf.pose[0] + 35
+        cube_rel_y = -cube1.pose.position.y + robot.pose.position.y + pf.pose[1]
+        cube_rel_theta = float(cube1.pose.rotation.angle_z.degrees - robot.pose.rotation.angle_z.degrees - pf.pose[2])
+
+        if not cube1.is_visible:
+            cube_rel_x = 999999
+            cube_rel_y = 999999
+
+        requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])},{cube_rel_x},{cube_rel_y},{cube_rel_theta}")
         global last
         print(robot.pose.position.x, robot.pose.position.y, last-time.time())
-        print(pf.pose)
+        print(cube1.pose.position)
+        #print(pf.pose)
         last=time.time()
 
 class cozmo_ar(StateMachineProgram):
