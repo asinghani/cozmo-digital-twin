@@ -69,7 +69,7 @@ def arena_update():
 
     cozmo.data.position.x = y
     cozmo.data.position.z = x
-    cozmo.data.position.y = -0.07
+    cozmo.data.position.y = -0.08
     cozmo.data.rotation = Rotation(90, 180, theta+90)
 
     cozmo2.data.position.x = y

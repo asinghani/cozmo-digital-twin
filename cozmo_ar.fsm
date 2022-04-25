@@ -17,11 +17,14 @@ class PublisherNode(StateNode):
             cube_rel_x = 999999
             cube_rel_y = 999999
 
-        requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])},{cube_rel_x},{cube_rel_y},{cube_rel_theta}")
+        #requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])},{cube_rel_x},{cube_rel_y},{cube_rel_theta}")
+        a, b, c = robot.kine.joint_to_base("lift_attach")[:3, 3]
+        requests.get(f"http://localhost:8000/data/{a},{b},{c}")
         global last
-        print(robot.pose.position.x, robot.pose.position.y, last-time.time())
-        print(cube1.pose.position)
+        #print(robot.pose.position.x, robot.pose.position.y, last-time.time())
+        #print(cube1.pose.position)
         #print(pf.pose)
+        #print(a, b, c)
         last=time.time()
 
 class cozmo_ar(StateMachineProgram):
@@ -44,7 +47,7 @@ class cozmo_ar(StateMachineProgram):
                             landmarks = landmarks,
                             num_particles = 1000,
                             motion_model = DefaultMotionModel(robot, sigma_trans=0.4, sigma_rot=0.05),
-                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=50)
+                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=30)
         )
 
         super().__init__(aruco_marker_size=50,
