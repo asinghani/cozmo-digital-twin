@@ -34,24 +34,60 @@ class ObjPublisherNode(StateNode):
     def start(self, event=None):
         super().start(event)
 
-        x = str(float(self.obj.x) / 1000)
-        y = str(float(self.obj.y) / 1000)
-        theta = str(math.degrees(self.obj.theta))
-        visible = "1" if self.obj.is_visible else "0"
+        try:
+            obj = self.obj.wm_obj
+        except:
+            return # Object not in worldmap yet
+
+        x = str(float(obj.x) / 1000)
+        y = str(float(obj.y) / 1000)
+        theta = str(math.degrees(obj.theta))
+        visible = "1" if obj.is_visible else "0"
 
         # Send the data
-        print(self.obj_name, x, y, theta, visible)
+        #print(self.obj_name, x, y, theta, visible)
         requests.get(f"{BRIDGE_SERVER}/update_obj/{self.obj_name}/{x},{y},{theta},{visible}")
+
+"""
+    Node that checks if there is a new waypoint command and sends a data transition if so,
+    otherwise sends a failure transition
+"""
+class WaypointCheckerNode(StateNode):
+    def start(self, event=None):
+        super().start(event)
+        res = requests.get(f"{BRIDGE_SERVER}/get_waypoint").text.strip()
+
+        if res == "NONE":
+            self.post_failure()
+        else:
+            x = float(res.split(",")[0]) * 1000
+            y = float(res.split(",")[1]) * 1000
+
+            self.post_data(Pose(x, y, 0, angle_z=degrees(math.nan)))
+
+"""
+    Inform the AR application that the waypoint navigation has completed
+"""
+class WaypointAcknowledgeNode(StateNode):
+    def start(self, event=None):
+        super().start(event)
+        requests.get(f"{BRIDGE_SERVER}/reset_waypoint")
 
 class cozmo_ar(StateMachineProgram):
     $setup {
-        launcher: StateNode() =N=> {publisher, spinner}
+        launcher: StateNode() =N=> {publisher, spinner, waypoint_checker_init}
 
         publisher: RobotPublisherNode() =N=>
-                   ObjPublisherNode(cube1.wm_obj, "cube1") =N=>
-                   ObjPublisherNode(cube2.wm_obj, "cube2") =N=>
-                   ObjPublisherNode(cube3.wm_obj, "cube3") =T(0.1)=> publisher
+                   ObjPublisherNode(cube1, "cube1") =N=>
+                   ObjPublisherNode(cube2, "cube2") =N=>
+                   ObjPublisherNode(cube3, "cube3") =T(0.1)=> publisher
 
+        waypoint_checker_init: WaypointAcknowledgeNode() =N=> waypoint_checker
+        waypoint_checker: WaypointCheckerNode()
+        waypoint_checker =F=> waypoint_checker
+        waypoint_checker =D=> PilotToPose() =C=> WaypointAcknowledgeNode() =N=> waypoint_checker
+
+        # Placeholder for real application logic code (for when AR visualization is being used alongside a more complex behavior)
         spinner: StateNode() =N=> spinner
     }
 
@@ -60,13 +96,16 @@ class cozmo_ar(StateMachineProgram):
         landmarks = {
             'Aruco-1': Pose(35, 0, 0, angle_z=degrees(180)),
             'Aruco-2': Pose(35, 100, 0, angle_z=degrees(180)),
+
+            #'Aruco-5': Pose(200, 250, 0, angle_z=degrees(180)),
+            #'Aruco-6': Pose(300, 250, 0, angle_z=degrees(180)),
         }
 
         pf = ParticleFilter(robot,
                             landmarks = landmarks,
                             num_particles = 1000,
-                            motion_model = DefaultMotionModel(robot, sigma_trans=0.4, sigma_rot=0.05),
-                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=70)
+                            motion_model = DefaultMotionModel(robot, sigma_trans=0.4, sigma_rot=0.06),
+                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=20)
         )
 
         super().__init__(aruco_marker_size=50,
