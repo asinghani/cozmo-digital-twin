@@ -1,97 +1,149 @@
 #!/usr/bin/env python3
+"""
+    This file is the main ARENA app which takes data coming in from cozmo-tools over HTTP requests
+    and sends it on to ARENA, and also makes any incoming events from ARENA available to cozmo-tools
+    in a polling manner. The reason for the use of HTTP requests and this multi-process system (as
+    opposed to directly connecting to ARENA from the cozmo program) is primarily for flexibility;
+    this system allows the cozmo library to be swapped out or even run on a different computer from
+    the ARENA program without interruptions. Furthermore, it improves the startup time of the cozmo
+    program because connecting to ARENA can be slightly slow.
+
+    Tested and working with arenaxr.org platform as of 04/28/2022 (ARENA-core e57f42d).
+"""
 
 from flask import Flask
-from subprocess import call
-import math
-import time
-import threading
+import math, time, threading
 from arena import *
-import threading
 
+# Reduce verbosity of Flask built-in logging
 import logging
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 
-x = 0
-y = 0
-theta = 0
+"""
+    Configuration parameters
+    Most of these should probably not need to change
+"""
+COZMO_GLB = "store/users/asinghan/cozmo.glb"
+COZMO_SCALE = 0.01 # relative to GLB file
 
-cube_x = 0
-cube_y = 0
-cube_theta = 0
+ORIGIN_GLB = "store/public/origin.glb"
+ORIGIN_SCALE = 0.03 # relative to GLB file
 
-@app.route("/data/<ax>,<ay>,<atheta>,<cx>,<cy>,<ctheta>")
-def dir(ax, ay, atheta, cx, cy, ctheta):
-    global x, y, theta, cube_x, cube_y, cube_theta
-    x, y, theta = float(ax)/1000, float(ay)/1000, float(atheta)
-    cube_x, cube_y, cube_theta = float(cx)/1000, float(cy)/1000, float(ctheta)
-    print(x, y, theta, cube_x, cube_y, cube_theta)
-    return ""
+CUBE_COLOR = (255, 0, 0) # RGB
+CUBE_DIM = 0.045 # meters
 
-scene = Scene(host="arenaxr.org", scene="cozmo-scene")
+APRILTAG_SIZE = 50 # mm
+APRILTAG_HEIGHT = 0.07 # meters
 
+ARENA_HOST = "arenaxr.org"
+ARENA_SCENE = "cozmo-new"
+
+HTTP_PORT = 8000
+
+scene = Scene(host=ARENA_HOST, scene=ARENA_SCENE)
+
+"""
+    Main dictionary of objects maintained on this end of the system
+    x (meters), y (meters), theta (degrees), visible (boolean)
+"""
+objects = {"cozmo": (0, 0, 0, False), "cube1": (0, 0, 0, False),
+           "cube2": (0, 0, 0, False), "cube3": (0, 0, 0, False)}
+
+arena_objects = {}
+
+"""
+    Recieve updated location of an object
+"""
+@app.route("/update_obj/<obj>/<x>,<y>,<theta>,<visible>")
+def update_obj(obj, x, y, theta, visible):
+    global objects
+
+    if obj not in objects:
+        print("Unknown object", obj)
+        return "ERROR_UNKNOWN_OBJECT"
+
+    objects[obj] = (float(x), float(y), float(theta), int(visible))
+    print(objects[obj])
+
+    return "OK"
+
+"""
+    Set up the 3D objects in ARENA with placeholder positions
+"""
 @scene.run_once
 def arena_init():
-    global cozmo, cozmo2, cube1
+    global arena_objects
 
-    cozmo2 = Box(
-        object_id="cozmo2",
-        position=(0, 0, 0),
-        scale=(0.02, 0.01, 0.01),
-        persist=True,
-        color=(0, 150, 0)
+    # Create the origin apriltag for the cozmo "world"
+    origin = GLTF(
+        object_id="origin",
+        url=ORIGIN_GLB,
+        position=(0, APRILTAG_HEIGHT, 0),
+        scale=(ORIGIN_SCALE, ORIGIN_SCALE, ORIGIN_SCALE),
+        rotation=(-90, 0, 0),
+        persist=True
     )
-    cozmo = GLTF(
+    origin.data["armarker"] = {
+        "markerid": "1",
+        "markertype": "apriltag_36h11",
+        "size": 50,
+        "buildable": False,
+        "dynamic": False
+    }
+    scene.add_object(origin)
+
+
+    # Create cozmo and the cubes
+    arena_objects["cozmo"] = GLTF(
         object_id="cozmo",
         url="store/users/asinghan/cozmo.glb",
-        position=(0, 0, 0),
+        position=(999, 999, 999),
         rotation=(90, 180, 90),
         scale=(.01, .01, .01),
         persist=True
     )
-    scene.add_object(cozmo)
-    scene.add_object(cozmo2)
+    scene.add_object(arena_objects["cozmo"])
 
-    cube1 = Box(
-        object_id="cube1",
-        position=(0, 0, 0),
-        scale=(0.045, 0.045, 0.045),
-        persist=True,
-        color=(120, 120, 0)
-    )
-    scene.add_object(cube1)
+    for cube in ("cube1", "cube2", "cube3"):
+        arena_objects[cube] = Box(
+            object_id=cube,
+            position=(999, 999, 999),
+            scale=(CUBE_DIM, CUBE_DIM, CUBE_DIM),
+            persist=True,
+            color=CUBE_COLOR
+        )
+        scene.add_object(arena_objects[cube])
 
+"""
+    Invoked in a loop once ARENA is connected, pushes updates to ARENA objects
+"""
 @scene.run_forever(interval_ms=100)
 def arena_update():
-    global cozmo, cozmo2, x, y, theta, cube_x, cube_y, cube_theta
+    global objects, arena_objects
 
-    cozmo.data.position.x = y
-    cozmo.data.position.z = x
-    cozmo.data.position.y = -0.08
-    cozmo.data.rotation = Rotation(90, 180, theta+90)
+    for obj in objects:
+        x, y, theta, visible = objects[obj]
 
-    cozmo2.data.position.x = y
-    cozmo2.data.position.z = x
-    cozmo2.data.position.y = -0.01
-    cozmo2.data.rotation = Rotation(0, theta, 0)
+        # Really big coordinates ~ invisible (in ARENA at least)
+        if not visible:
+            x, y = 999, 999
 
-    cube1.data.position.x = cube_y
-    cube1.data.position.z = cube_x
-    cube1.data.position.y = -0.0475
-    cube1.data.rotation = Rotation(0, cube_theta, 0)
+        arena_objects[obj].data.position.x = y
+        arena_objects[obj].data.position.z = x
+        arena_objects[obj].data.position.y = 0
 
+        if obj == "cozmo":
+            arena_objects[obj].data.rotation = Rotation(90, 180, theta+90)
+        else:
+            arena_objects[obj].data.rotation = Rotation(0, theta, 0)
 
-    print("cozmo", cozmo.data.position)
-    scene.update_object(cozmo)
-    scene.update_object(cozmo2)
-    scene.update_object(cube1)
-
-def init_flask():
-    app.run(host = "0.0.0.0", port=8000)
+        scene.update_object(arena_objects[obj])
 
 if __name__ == "__main__":
-    threading.Thread(target=init_flask).start()
+    # Start the HTTP server thread and the ARENA asyncio loop
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=HTTP_PORT)).start()
     scene.run_tasks()
 

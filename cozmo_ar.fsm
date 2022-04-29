@@ -3,35 +3,54 @@ import requests
 import time
 import math
 
-last = 0
+BRIDGE_SERVER = "http://localhost:8000"
 
-class PublisherNode(StateNode):
+"""
+    Node that publishes the pose of the robot. The calling FSM is responsible
+    for ensuring this node is not called too often (minimum 100-200ms delay recommended)
+"""
+class RobotPublisherNode(StateNode):
     def start(self, event=None):
         super().start(event)
 
-        cube_rel_x = -cube1.pose.position.x + robot.pose.position.x + pf.pose[0] + 35
-        cube_rel_y = -cube1.pose.position.y + robot.pose.position.y + pf.pose[1]
-        cube_rel_theta = float(cube1.pose.rotation.angle_z.degrees - robot.pose.rotation.angle_z.degrees - pf.pose[2])
+        x = str(float(pf.pose[0]) / 1000)
+        y = str(float(pf.pose[1]) / 1000)
+        theta = str(math.degrees(pf.pose[2]))
+        visible = "1"
 
-        if not cube1.is_visible:
-            cube_rel_x = 999999
-            cube_rel_y = 999999
+        # Send the data
+        requests.get(f"{BRIDGE_SERVER}/update_obj/cozmo/{x},{y},{theta},{visible}")
 
-        #requests.get(f"http://localhost:8000/data/{pf.pose[0]+35},{pf.pose[1]},{math.degrees(pf.pose[2])},{cube_rel_x},{cube_rel_y},{cube_rel_theta}")
-        a, b, c = robot.kine.joint_to_base("lift_attach")[:3, 3]
-        requests.get(f"http://localhost:8000/data/{a},{b},{c}")
-        global last
-        #print(robot.pose.position.x, robot.pose.position.y, last-time.time())
-        #print(cube1.pose.position)
-        #print(pf.pose)
-        #print(a, b, c)
-        last=time.time()
+"""
+    Node that publishes the pose of the a worldmap object. The calling FSM is responsible
+    for ensuring this node is not called too often (minimum 100-200ms delay recommended)
+"""
+class ObjPublisherNode(StateNode):
+    def __init__(self, obj, obj_name):
+        super().__init__()
+        self.obj = obj
+        self.obj_name = obj_name
+
+    def start(self, event=None):
+        super().start(event)
+
+        x = str(float(self.obj.x) / 1000)
+        y = str(float(self.obj.y) / 1000)
+        theta = str(math.degrees(self.obj.theta))
+        visible = "1" if self.obj.is_visible else "0"
+
+        # Send the data
+        print(self.obj_name, x, y, theta, visible)
+        requests.get(f"{BRIDGE_SERVER}/update_obj/{self.obj_name}/{x},{y},{theta},{visible}")
 
 class cozmo_ar(StateMachineProgram):
     $setup {
         launcher: StateNode() =N=> {publisher, spinner}
 
-        publisher: PublisherNode() =T(0.1)=> publisher
+        publisher: RobotPublisherNode() =N=>
+                   ObjPublisherNode(cube1.wm_obj, "cube1") =N=>
+                   ObjPublisherNode(cube2.wm_obj, "cube2") =N=>
+                   ObjPublisherNode(cube3.wm_obj, "cube3") =T(0.1)=> publisher
 
         spinner: StateNode() =N=> spinner
     }
@@ -39,15 +58,15 @@ class cozmo_ar(StateMachineProgram):
     def __init__(self):
         global pf
         landmarks = {
-            'Aruco-1': Pose(0, 0, 0, angle_z=degrees(180)),
-            'Aruco-2': Pose(0, 100, 0, angle_z=degrees(180)),
+            'Aruco-1': Pose(35, 0, 0, angle_z=degrees(180)),
+            'Aruco-2': Pose(35, 100, 0, angle_z=degrees(180)),
         }
 
         pf = ParticleFilter(robot,
                             landmarks = landmarks,
                             num_particles = 1000,
                             motion_model = DefaultMotionModel(robot, sigma_trans=0.4, sigma_rot=0.05),
-                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=30)
+                            sensor_model = ArucoCombinedSensorModel(robot, distance_variance=70)
         )
 
         super().__init__(aruco_marker_size=50,
