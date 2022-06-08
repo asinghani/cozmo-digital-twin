@@ -2,8 +2,8 @@
 
 The goal of this project is to use augmented reality to visualize the world map and navigation-stack of a small ground-based robot. 
 
-- The primary goal of this project is to be an educational tool to more intuitively understand the robot's localization capabilities and how it differs from the robot's actual location.
-- Additionally, this project works towards developing a platform for third-person remote-control of robots while exploring a foreign environment.
+- The primary purpose is to be an educational tool to more intuitively understand the robot's localization capabilities and how it differs from the robot's actual location.
+- Secondarily, this project is meant to work towards developing a platform for third-person (more natural than first-person in many circumstances) remote-control of robots while exploring a foreign environment.
 
 ![demo1](doc/demo1.gif)
 
