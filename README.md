@@ -5,9 +5,9 @@ The goal of this project is to use augmented reality to visualize the world map 
 - The primary goal of this project is to be an educational tool to more intuitively understand the robot's localization capabilities and how it differs from the robot's actual location.
 - Additionally, this project works towards developing a platform for third-person remote-control of robots while exploring a foreign environment.
 
-![demo1](doc/demo1.png)
+![demo1](doc/demo1.gif)
 
-![demo2](doc/demo2.png)
+![demo2](doc/demo2.gif)
 
 ## Dependencies
 
@@ -35,11 +35,11 @@ The augmented reality demo runs best on a modern iPhone or iPad (inside of [XR B
 
 Next, print and cut out a "universal marker." The default configuration uses only one marker, `tags/tags_1_4.pdf`. This should be printed, cut out, folded up, and glued together. The top side is an AprilTag (for the ARENA app to detect) while the front and back sides have ArUco markers (for Cozmo to detect). It allows the AR app to localize itself relative to Cozmo to make it easier to visualize exactly where the robot thinks it is.
 
-![hardware](hardware.png)
+![hardware](doc/hardware.png)
 
 Finally, to run the program on Cozmo, launch a new shell (while `arena_app.py` is running in its own process). Start with `genfsm cozmo_ar.fsm` to generate the python FSM file. Launch `simple_cli` (from cozmo-tools) and run `show all` (to see the camera feed and particle viewer) and then `runfsm("cozmo_ar")` to start the example FSM.
 
-![fsm](fsm.png)
+![fsm](doc/fsm.png)
 
 If you are viewing the ARENA scene in a browser or mobile device (and the origin AprilTag on the `1_4` universal marker has been detected), then you should now see a 3D model of Cozmo at its estimated location, as well as a small colored circle which follows your "gaze". Tapping the screen places a waypoint at this colored circle and commands the robot to drive there.
 
